@@ -3,7 +3,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"log"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -22,6 +21,16 @@ import (
 var cloudName string = os.Getenv("CLOUDINARY_CLOUD_NAME")
 var apiKey string = os.Getenv("CLOUDINARY_API_KEY")
 var apiSecret string = os.Getenv("CLOUDINARY_API_SECRET")
+
+func toDoc(v interface{}) (doc *bson.D, err error) {
+	data, err := bson.Marshal(v)
+	if err != nil {
+		return
+	}
+
+	err = bson.Unmarshal(data, &doc)
+	return
+}
 
 func uploadAvatar(file multipart.File, ctx context.Context, uid string, fileTags string) (*uploader.UploadResult, error) {
 	cld, _ := cloudinary.NewFromParams(cloudName, apiKey, apiSecret)
@@ -77,6 +86,7 @@ func UpdateProfile() gin.HandlerFunc {
 		file, _, err := c.Request.FormFile("selectedFile")
 		var result *uploader.UploadResult
 		var updateObj primitive.D
+		var secureURL string
 		if err == nil {
 			if foundUser.AvatarURL != "" {
 				result, err = updateAvatar(file, c, c.GetString("uid"), fileTags)
@@ -86,8 +96,9 @@ func UpdateProfile() gin.HandlerFunc {
 			if err != nil {
 				c.String(http.StatusConflict, "Upload to cloudinary failed")
 			}
-			updateObj = append(updateObj, bson.E{"avatarURL", result.SecureURL})
+			secureURL = result.SecureURL
 		}
+		updateObj = append(updateObj, bson.E{"avatarURL", secureURL})
 		updateObj = append(updateObj, bson.E{"about", about})
 		updateObj = append(updateObj, bson.E{"status", status})
 		updateObj = append(updateObj, bson.E{"city", city})
@@ -109,12 +120,52 @@ func UpdateProfile() gin.HandlerFunc {
 			},
 			&opt,
 		)
-		defer cancel()
 
+		id, err := primitive.ObjectIDFromHex(foundUser.UserID)
 		if err != nil {
-			log.Panic(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 			return
 		}
+		var requestUser models.RequestUser
+		err = userCollection.FindOne(ctx, bson.M{"email": c.GetString("email")}).Decode(&requestUser)
+		defer cancel()
+		if err != nil {
+			fmt.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid User"})
+			return
+		}
+		data, err := toDoc(requestUser)
+		_, err = requestCollection.UpdateMany(
+			ctx,
+			bson.M{"requester._id": id},
+			bson.D{{"$set",
+				bson.D{
+					{"requester", data},
+				},
+			}},
+		)
+		if err != nil {
+			fmt.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+			return
+		}
+
+		_, err = requestCollection.UpdateMany(
+			ctx,
+			bson.M{"recipient._id": id},
+			bson.D{{"$set",
+				bson.D{
+					{"recipient", data},
+				},
+			}},
+		)
+		if err != nil {
+			fmt.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+			return
+		}
+		defer cancel()
+
 		c.JSON(http.StatusCreated, gin.H{
 			"message": "Successfully uploaded the file",
 		})

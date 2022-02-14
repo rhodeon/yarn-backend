@@ -36,6 +36,7 @@ func main() {
 
 	router.Use(middleware.Authentication())
 	routes.ProfileRoutes(router)
+	routes.RequestRoutes(router)
 
 	// API-2
 	router.GET("/api-1", func(c *gin.Context) {
