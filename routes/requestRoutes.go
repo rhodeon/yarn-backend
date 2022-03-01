@@ -10,4 +10,6 @@ func RequestRoutes(incomingRoutes *gin.Engine) {
 	incomingRoutes.POST("/users/request", controller.SendRequest())
 	incomingRoutes.GET("/users/request/sent", controller.GetSentRequest())
 	incomingRoutes.GET("/users/request/received", controller.GetReceivedRequest())
+	incomingRoutes.POST("/users/request/accept", controller.AcceptRequest())
+	incomingRoutes.POST("/users/request/delete", controller.DeleteRequest())
 }

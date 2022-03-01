@@ -99,7 +99,7 @@ func SignUp() gin.HandlerFunc {
 		user.RefreshToken = &refreshToken
 		user.Status = "Hello There! Connect with me on Yarn!"
 
-		resultInsertionNumber, insertErr := userCollection.InsertOne(ctx, user)
+		_, insertErr := userCollection.InsertOne(ctx, user)
 		if insertErr != nil {
 			msg := fmt.Sprintf("User item was not created")
 			c.JSON(http.StatusInternalServerError, gin.H{"error": msg})
@@ -107,7 +107,21 @@ func SignUp() gin.HandlerFunc {
 		}
 		defer cancel()
 
-		c.JSON(http.StatusOK, resultInsertionNumber)
+		h, _ := time.ParseDuration("24h")
+		c.JSON(http.StatusOK, gin.H{
+			"token":          token,
+			"refreshToken":   refreshToken,
+			"expirationTime": h.Milliseconds(),
+			"userID":         user.UserID,
+			"profile": gin.H{
+				"city":      user.City,
+				"about":     user.About,
+				"status":    user.Status,
+				"firstName": user.FirstName,
+				"lastName":  user.LastName,
+				"avatar":    user.AvatarURL,
+			},
+		})
 
 	}
 }

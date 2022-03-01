@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/Mutay1/chat-backend/controllers"
 	middleware "github.com/Mutay1/chat-backend/middlewares"
 	routes "github.com/Mutay1/chat-backend/routes"
 
@@ -19,11 +20,12 @@ func main() {
 		port = "8000"
 	}
 
+	go controllers.Manager.Start()
 	router := gin.New()
 	router.Use(gin.Logger())
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:3000"},
-		AllowMethods:     []string{"PUT", "PATCH", "GET", "POST"},
+		AllowOrigins:     []string{"http://localhost:3000", "http://192.168.43.236:3000"},
+		AllowMethods:     []string{"PUT", "PATCH", "GET", "POST", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Authorization", "Content-Type"},
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
@@ -33,10 +35,12 @@ func main() {
 		MaxAge: 12 * time.Hour,
 	}))
 	routes.UserRoutes(router)
+	routes.WsRoutes(router)
 
 	router.Use(middleware.Authentication())
 	routes.ProfileRoutes(router)
 	routes.RequestRoutes(router)
+	routes.FriendRoutes(router)
 
 	// API-2
 	router.GET("/api-1", func(c *gin.Context) {

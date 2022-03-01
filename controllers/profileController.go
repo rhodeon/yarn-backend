@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	helper "github.com/Mutay1/chat-backend/helpers"
 	"github.com/Mutay1/chat-backend/models"
 	"github.com/cloudinary/cloudinary-go"
 	"github.com/cloudinary/cloudinary-go/api/uploader"
@@ -21,16 +22,6 @@ import (
 var cloudName string = os.Getenv("CLOUDINARY_CLOUD_NAME")
 var apiKey string = os.Getenv("CLOUDINARY_API_KEY")
 var apiSecret string = os.Getenv("CLOUDINARY_API_SECRET")
-
-func toDoc(v interface{}) (doc *bson.D, err error) {
-	data, err := bson.Marshal(v)
-	if err != nil {
-		return
-	}
-
-	err = bson.Unmarshal(data, &doc)
-	return
-}
 
 func uploadAvatar(file multipart.File, ctx context.Context, uid string, fileTags string) (*uploader.UploadResult, error) {
 	cld, _ := cloudinary.NewFromParams(cloudName, apiKey, apiSecret)
@@ -126,16 +117,16 @@ func UpdateProfile() gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 			return
 		}
-		var requestUser models.RequestUser
-		err = userCollection.FindOne(ctx, bson.M{"email": c.GetString("email")}).Decode(&requestUser)
+		var friend models.Friend
+		err = userCollection.FindOne(ctx, bson.M{"email": c.GetString("email")}).Decode(&friend)
 		defer cancel()
 		if err != nil {
 			fmt.Println(err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid User"})
 			return
 		}
-		data, err := toDoc(requestUser)
-		_, err = requestCollection.UpdateMany(
+		data, err := helper.ToDoc(friend)
+		_, err = friendshipCollection.UpdateMany(
 			ctx,
 			bson.M{"requester._id": id},
 			bson.D{{"$set",
@@ -150,7 +141,7 @@ func UpdateProfile() gin.HandlerFunc {
 			return
 		}
 
-		_, err = requestCollection.UpdateMany(
+		_, err = friendshipCollection.UpdateMany(
 			ctx,
 			bson.M{"recipient._id": id},
 			bson.D{{"$set",
