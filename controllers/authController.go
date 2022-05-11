@@ -66,18 +66,17 @@ func SignUp() gin.HandlerFunc {
 			return
 		}
 
-		count, err := userCollection.CountDocuments(ctx, bson.M{"email": user.Email})
-		defer cancel()
-		if err != nil {
-			log.Panic(err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "error occured while checking for the email"})
-			return
-		}
-
 		password := HashPassword(*user.Password)
 		user.Password = &password
 
-		count, err = userCollection.CountDocuments(ctx, bson.M{"username": user.Username})
+		// check if any pre-existing user with the same username or email exists
+		count, err := userCollection.CountDocuments(ctx, bson.M{
+			"$or": bson.A{
+				bson.M{"username": user.Username},
+				bson.M{"email": user.Email},
+			},
+		})
+
 		defer cancel()
 		if err != nil {
 			log.Panic(err)
