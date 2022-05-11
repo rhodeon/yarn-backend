@@ -49,25 +49,23 @@ func VerifyPassword(userPassword string, providedPassword string) (bool, string)
 	return check, msg
 }
 
-//SignUp is the api used to tget a single user
+//SignUp creates a user account
 func SignUp() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
-		var user models.User
+		defer cancel()
 
+		// validate request
+		var user models.User
 		if err := c.BindJSON(&user); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 
-		validationErr := validate.Struct(user)
-		if validationErr != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": validationErr.Error()})
+		if err := validate.Struct(user); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-
-		password := HashPassword(*user.Password)
-		user.Password = &password
 
 		// check if any pre-existing user with the same username or email exists
 		count, err := userCollection.CountDocuments(ctx, bson.M{
@@ -77,18 +75,17 @@ func SignUp() gin.HandlerFunc {
 			},
 		})
 
-		defer cancel()
 		if err != nil {
-			log.Panic(err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "error occured while checking for the phone number"})
+			helper.HandleInternalServerError(c, err, "an error occurred while verifying user details")
 			return
 		}
 
 		if count > 0 {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "this Email or Username already exists"})
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "the email or username already exists"})
 			return
 		}
 
+		// set user details
 		user.CreatedAt, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
 		user.UpdatedAt, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
 		user.ID = primitive.NewObjectID()
@@ -97,14 +94,14 @@ func SignUp() gin.HandlerFunc {
 		user.Token = &token
 		user.RefreshToken = &refreshToken
 		user.Status = "Hello There! Connect with me on Yarn!"
+		password := HashPassword(*user.Password)
+		user.Password = &password
 
-		_, insertErr := userCollection.InsertOne(ctx, user)
-		if insertErr != nil {
-			msg := fmt.Sprintf("User item was not created")
-			c.JSON(http.StatusInternalServerError, gin.H{"error": msg})
+		// create new user in repository
+		if _, err = userCollection.InsertOne(ctx, user); err != nil {
+			helper.HandleInternalServerError(c, err, "user could not be created")
 			return
 		}
-		defer cancel()
 
 		h, _ := time.ParseDuration("24h")
 		c.JSON(http.StatusOK, gin.H{
@@ -121,7 +118,6 @@ func SignUp() gin.HandlerFunc {
 				"avatar":    user.AvatarURL,
 			},
 		})
-
 	}
 }
 
