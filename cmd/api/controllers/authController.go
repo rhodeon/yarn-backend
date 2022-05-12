@@ -45,7 +45,7 @@ func VerifyPassword(userPassword string, providedPassword string) (bool, string)
 	msg := ""
 
 	if err != nil {
-		msg = fmt.Sprintf("login or passowrd is incorrect")
+		msg = fmt.Sprintf("invalid user credentials")
 		check = false
 	}
 
@@ -120,29 +120,42 @@ func SignUp(app internal.Application) gin.HandlerFunc {
 	}
 }
 
-//Login is the api used to get a single user
-func Login() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
+//Login authenticates a single user.
+func Login(app internal.Application) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
 		var user models.User
 
-		var foundUser models.User
-
-		if err := c.BindJSON(&user); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
+		if err := ctx.BindJSON(&user); err != nil {
+			ctx.AbortWithStatusJSON(
+				http.StatusBadRequest,
+				gin.H{"error": err.Error()},
+			)
 		}
-		err := userCollection.FindOne(ctx, bson.M{"email": user.Email}).Decode(&foundUser)
-		defer cancel()
+
+		// retrieve user from repository
+		foundUser, err := app.Repositories.Users.GetByEmail(*user.Email)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "login or passowrd is incorrect"})
+			switch {
+			case errors.Is(err, repository.ErrRecordNotFound):
+				ctx.AbortWithStatusJSON(
+					http.StatusUnprocessableEntity,
+					gin.H{"error": "invalid user credentials"},
+				)
+
+			default:
+				helper.HandleInternalServerError(ctx, err)
+			}
+
 			return
 		}
 
+		// check password
 		passwordIsValid, msg := VerifyPassword(*user.Password, *foundUser.Password)
-		defer cancel()
 		if passwordIsValid != true {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": msg})
+			ctx.AbortWithStatusJSON(
+				http.StatusUnprocessableEntity,
+				gin.H{"error": msg},
+			)
 			return
 		}
 
@@ -150,7 +163,7 @@ func Login() gin.HandlerFunc {
 
 		helper.UpdateAllTokens(token, refreshToken, foundUser.UserID)
 		h, _ := time.ParseDuration("24h")
-		c.JSON(http.StatusOK, gin.H{
+		ctx.JSON(http.StatusOK, gin.H{
 			"token":          token,
 			"refreshToken":   refreshToken,
 			"expirationTime": h.Milliseconds(),

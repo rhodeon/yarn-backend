@@ -9,6 +9,6 @@ import (
 //UserRoutes function
 func UserRoutes(app internal.Application, incomingRoutes *gin.Engine) {
 	incomingRoutes.POST("/users/signup", controller.SignUp(app))
-	incomingRoutes.POST("/users/login", controller.Login())
+	incomingRoutes.POST("/users/login", controller.Login(app))
 	incomingRoutes.POST("/users/refresh-token", controller.RefreshToken())
 }
