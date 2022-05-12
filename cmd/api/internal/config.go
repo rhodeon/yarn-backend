@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"errors"
 	"flag"
 	"os"
 	"strconv"
@@ -13,7 +14,8 @@ type Config struct {
 	DisplayVersion bool
 
 	Db struct {
-		Dsn          string
+		Name         string
+		Uri          string
 		MaxOpenConns int
 		MaxIdleConns int
 		MaxIdleTime  string
@@ -25,19 +27,25 @@ func (c *Config) Parse() {
 	flag.IntVar(&c.Port, "port", c.defaultPort(), "API server port\nDotenv variable: PORT\n")
 	flag.BoolVar(&c.DisplayVersion, "version", false, "Display version and build time")
 
-	flag.StringVar(&c.Db.Dsn, "db-dsn", c.defaultDbDsn(), "PostgreSQL DSN\nDotenv variable: DB_DSN\n")
-	flag.IntVar(&c.Db.MaxOpenConns, "db-max-open-conns", c.defaultDbMaxOpenConns(), "PostgreSQL maximum number of open connections\nDotenv variable: DB_MAX_OPEN_CONNS\n")
-	flag.IntVar(&c.Db.MaxIdleConns, "db-max-idle-conns", c.defaultDbMaxIdleConns(), "PostgreSQL maximum number of idle connections\nDotenv variable: DB_MAX_IDLE_CONNS\n")
-	flag.StringVar(&c.Db.MaxIdleTime, "db-max-idle-time", c.defaultDbMaxIdleTime(), "PostgreSQL maximumn idle time\nDotenv variable: DB_MAX_IDLE_TIME\n")
+	flag.StringVar(&c.Db.Uri, "db-uri", c.defaultDbUri(), "MongoDB Connection String URI\nDotenv variable: DB_URI\n")
+	flag.StringVar(&c.Db.Name, "db-name", c.defaultDbName(), "MongoDB Database Name\nDotenv variable: DB_NAME\n")
+	flag.IntVar(&c.Db.MaxOpenConns, "db-max-open-conns", c.defaultDbMaxOpenConns(), "MongoDB maximum number of open connections\nDotenv variable: DB_MAX_OPEN_CONNS\n")
+	flag.IntVar(&c.Db.MaxIdleConns, "db-max-idle-conns", c.defaultDbMaxIdleConns(), "MongoDB maximum number of idle connections\nDotenv variable: DB_MAX_IDLE_CONNS\n")
+	flag.StringVar(&c.Db.MaxIdleTime, "db-max-idle-time", c.defaultDbMaxIdleTime(), "MongoDB maximumn idle time\nDotenv variable: DB_MAX_IDLE_TIME\n")
 
 	flag.Parse()
 }
 
 // Validate ensures required flags or environment variables are present
 func (c *Config) Validate() error {
-	//if c.Db.Dsn == "" {
-	//	return errors.New("the 'db-dsn' flag is required")
-	//}
+	if c.Db.Uri == "" {
+		return errors.New("the 'db-uri' flag is required")
+	}
+
+	if c.Db.Name == "" {
+		return errors.New("the 'db-name flag is required")
+	}
+
 	return nil
 }
 
@@ -62,13 +70,21 @@ func (c *Config) defaultPort() int {
 	return defaultPort
 }
 
-func (c *Config) defaultDbDsn() string {
-	const defaultDsn = ""
-
-	if dsn, exists := os.LookupEnv("DB_DSN"); exists {
-		return dsn
+func (c *Config) defaultDbUri() string {
+	const defaultUri = ""
+	if uri, exists := os.LookupEnv("DB_URI"); exists {
+		return uri
 	}
-	return defaultDsn
+	return defaultUri
+}
+
+func (c *Config) defaultDbName() string {
+	const defaultName = ""
+
+	if name, exists := os.LookupEnv("DB_NAME"); exists {
+		return name
+	}
+	return defaultName
 }
 
 func (c *Config) defaultDbMaxOpenConns() int {
