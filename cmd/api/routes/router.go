@@ -24,7 +24,7 @@ func Router(app internal.Application) *gin.Engine {
 		},
 		MaxAge: 12 * time.Hour,
 	}))
-	UserRoutes(router)
+	UserRoutes(app, router)
 	WsRoutes(router)
 
 	router.Use(middleware.Authentication())

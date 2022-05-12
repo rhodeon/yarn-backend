@@ -1,14 +1,14 @@
 package routes
 
 import (
-	controller "github.com/Mutay1/chat-backend/controllers"
-
+	controller "github.com/Mutay1/chat-backend/cmd/api/controllers"
+	"github.com/Mutay1/chat-backend/cmd/api/internal"
 	"github.com/gin-gonic/gin"
 )
 
 //UserRoutes function
-func UserRoutes(incomingRoutes *gin.Engine) {
-	incomingRoutes.POST("/users/signup", controller.SignUp())
+func UserRoutes(app internal.Application, incomingRoutes *gin.Engine) {
+	incomingRoutes.POST("/users/signup", controller.SignUp(app))
 	incomingRoutes.POST("/users/login", controller.Login())
 	incomingRoutes.POST("/users/refresh-token", controller.RefreshToken())
 }

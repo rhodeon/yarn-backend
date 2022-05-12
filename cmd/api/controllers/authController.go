@@ -2,7 +2,10 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"github.com/Mutay1/chat-backend/cmd/api/internal"
+	"github.com/Mutay1/chat-backend/domain/repository"
 	"log"
 
 	"net/http"
@@ -50,38 +53,23 @@ func VerifyPassword(userPassword string, providedPassword string) (bool, string)
 }
 
 //SignUp creates a user account
-func SignUp() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
-		defer cancel()
-
+func SignUp(app internal.Application) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
 		// validate request
 		var user models.User
-		if err := c.BindJSON(&user); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		if err := ctx.BindJSON(&user); err != nil {
+			ctx.AbortWithStatusJSON(
+				http.StatusBadRequest,
+				gin.H{"error": err.Error()},
+			)
 			return
 		}
 
 		if err := validate.Struct(user); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-
-		// check if any pre-existing user with the same username or email exists
-		count, err := userCollection.CountDocuments(ctx, bson.M{
-			"$or": bson.A{
-				bson.M{"username": user.Username},
-				bson.M{"email": user.Email},
-			},
-		})
-
-		if err != nil {
-			helper.HandleInternalServerError(c, err, "an error occurred while verifying user details")
-			return
-		}
-
-		if count > 0 {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "the email or username already exists"})
+			ctx.AbortWithStatusJSON(
+				http.StatusBadRequest,
+				gin.H{"error": err.Error()},
+			)
 			return
 		}
 
@@ -98,24 +86,35 @@ func SignUp() gin.HandlerFunc {
 		user.Password = &password
 
 		// create new user in repository
-		if _, err = userCollection.InsertOne(ctx, user); err != nil {
-			helper.HandleInternalServerError(c, err, "user could not be created")
+		newUser, err := app.Repositories.Users.Create(user)
+		if err != nil {
+			switch {
+			case errors.Is(err, repository.ErrDuplicateDetails):
+				ctx.AbortWithStatusJSON(
+					http.StatusUnprocessableEntity,
+					gin.H{"error": "the email or username already exists"},
+				)
+
+			default:
+				helper.HandleInternalServerError(ctx, err)
+			}
+
 			return
 		}
 
 		h, _ := time.ParseDuration("24h")
-		c.JSON(http.StatusOK, gin.H{
+		ctx.JSON(http.StatusOK, gin.H{
 			"token":          token,
 			"refreshToken":   refreshToken,
 			"expirationTime": h.Milliseconds(),
-			"userID":         user.UserID,
+			"userID":         newUser.UserID,
 			"profile": gin.H{
-				"city":      user.City,
-				"about":     user.About,
-				"status":    user.Status,
-				"firstName": user.FirstName,
-				"lastName":  user.LastName,
-				"avatar":    user.AvatarURL,
+				"city":      newUser.City,
+				"about":     newUser.About,
+				"status":    newUser.Status,
+				"firstName": newUser.FirstName,
+				"lastName":  newUser.LastName,
+				"avatar":    newUser.AvatarURL,
 			},
 		})
 	}
@@ -165,7 +164,6 @@ func Login() gin.HandlerFunc {
 				"avatar":    foundUser.AvatarURL,
 			},
 		})
-
 	}
 }
 

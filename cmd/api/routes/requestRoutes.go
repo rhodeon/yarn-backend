@@ -1,7 +1,7 @@
 package routes
 
 import (
-	controller "github.com/Mutay1/chat-backend/controllers"
+	controller "github.com/Mutay1/chat-backend/cmd/api/controllers"
 	"github.com/gin-gonic/gin"
 )
 

@@ -35,7 +35,7 @@ func main() {
 	log.Println("database connection established")
 
 	// start server
-	if err := serveApp(config); err != nil {
+	if err := serveApp(config, db); err != nil {
 		log.Fatalln(err)
 	}
 }
