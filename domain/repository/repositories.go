@@ -2,5 +2,6 @@ package repository
 
 // Repositories encapsulates all available repositories for easy reuse.
 type Repositories struct {
-	Users UserRepository
+	Users       UserRepository
+	Friendships FriendshipRepository
 }

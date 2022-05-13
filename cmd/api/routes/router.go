@@ -2,11 +2,12 @@ package routes
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/Mutay1/chat-backend/cmd/api/internal"
 	"github.com/Mutay1/chat-backend/cmd/api/middleware"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	"time"
 )
 
 func Router(app internal.Application) *gin.Engine {
@@ -29,8 +30,8 @@ func Router(app internal.Application) *gin.Engine {
 
 	router.Use(middleware.Authentication(app))
 	ProfileRoutes(router)
-	RequestRoutes(router)
-	FriendRoutes(router)
+	RequestRoutes(app, router)
+	FriendRoutes(app, router)
 
 	// API-1
 	router.GET("/api-1", func(c *gin.Context) {
