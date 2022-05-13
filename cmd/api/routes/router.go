@@ -3,7 +3,7 @@ package routes
 import (
 	"fmt"
 	"github.com/Mutay1/chat-backend/cmd/api/internal"
-	"github.com/Mutay1/chat-backend/cmd/api/middlewares"
+	"github.com/Mutay1/chat-backend/cmd/api/middleware"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"time"
