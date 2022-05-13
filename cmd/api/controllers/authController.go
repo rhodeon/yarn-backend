@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/Mutay1/chat-backend/cmd/api/internal"
 	"github.com/Mutay1/chat-backend/domain/repository"
+	"go.mongodb.org/mongo-driver/bson"
 	"log"
 
 	"net/http"
@@ -19,7 +20,6 @@ import (
 	helper "github.com/Mutay1/chat-backend/helpers"
 	"github.com/Mutay1/chat-backend/models"
 
-	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"golang.org/x/crypto/bcrypt"
@@ -78,7 +78,7 @@ func SignUp(app internal.Application) gin.HandlerFunc {
 		user.UpdatedAt, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
 		user.ID = primitive.NewObjectID()
 		user.UserID = user.ID.Hex()
-		token, refreshToken, _ := helper.GenerateAllTokens(*user.Email, *user.FirstName, *user.LastName, user.UserID)
+		token, refreshToken, _ := helper.GenerateTokens(app.Config.JwtSecret, user.UserID)
 		user.Token = &token
 		user.RefreshToken = &refreshToken
 		user.Status = "Hello There! Connect with me on Yarn!"
@@ -159,7 +159,7 @@ func Login(app internal.Application) gin.HandlerFunc {
 			return
 		}
 
-		token, refreshToken, _ := helper.GenerateAllTokens(*foundUser.Email, *foundUser.FirstName, *foundUser.LastName, foundUser.UserID)
+		token, refreshToken, _ := helper.GenerateTokens(app.Config.JwtSecret, foundUser.UserID)
 
 		helper.UpdateAllTokens(token, refreshToken, foundUser.UserID)
 		h, _ := time.ParseDuration("24h")
@@ -181,7 +181,7 @@ func Login(app internal.Application) gin.HandlerFunc {
 }
 
 //RefreshToken api is used to refresh user token
-func RefreshToken() gin.HandlerFunc {
+func RefreshToken(app internal.Application) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 		var user models.User
@@ -195,10 +195,10 @@ func RefreshToken() gin.HandlerFunc {
 		defer cancel()
 		if err != nil {
 			fmt.Println(err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid Token"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid Token"})
 			return
 		}
-		token, refreshToken, _ := helper.GenerateAllTokens(*foundUser.Email, *foundUser.FirstName, *foundUser.LastName, foundUser.UserID)
+		token, refreshToken, _ := helper.GenerateTokens(app.Config.JwtSecret, foundUser.UserID)
 		helper.UpdateAllTokens(token, refreshToken, foundUser.UserID)
 		h, _ := time.ParseDuration("24h")
 		c.JSON(http.StatusOK, gin.H{

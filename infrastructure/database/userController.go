@@ -45,6 +45,32 @@ func (u UserController) Create(user models.User) (models.User, error) {
 	return user, nil
 }
 
+// GetById retrieves an existing user via their ID.
+// repository.ErrRecordNotFound is returned if no qualifying user is found.
+func (u UserController) GetById(id string) (models.User, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// empty struct to populate with fetched user data
+	foundUser := models.User{}
+
+	err := u.Db.Collection(collectionUsers).FindOne(ctx, bson.M{
+		"userID": id,
+	}).Decode(&foundUser)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, mongo.ErrNoDocuments):
+			return models.User{}, repository.ErrRecordNotFound
+
+		default:
+			return models.User{}, err
+		}
+	}
+
+	return foundUser, nil
+}
+
 // GetByEmail retrieves an existing user via their email.
 // repository.ErrRecordNotFound is returned if no qualifying user is found.
 func (u UserController) GetByEmail(email string) (models.User, error) {

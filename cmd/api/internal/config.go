@@ -11,6 +11,7 @@ type Config struct {
 	Env            string
 	Version        string
 	Port           int
+	JwtSecret      string
 	DisplayVersion bool
 
 	Db struct {
@@ -25,6 +26,7 @@ type Config struct {
 func (c *Config) Parse() {
 	flag.StringVar(&c.Env, "env", c.defaultEnv(), "Environment (development|staging|production)\nDotenv variable: ENV\n")
 	flag.IntVar(&c.Port, "port", c.defaultPort(), "API server port\nDotenv variable: PORT\n")
+	flag.StringVar(&c.JwtSecret, "jwt-secret", c.defaultJwtSecret(), "JWT Secret Key\nDotEnv variable: JWT_SECRET\n")
 	flag.BoolVar(&c.DisplayVersion, "version", false, "Display version and build time")
 
 	flag.StringVar(&c.Db.Uri, "db-uri", c.defaultDbUri(), "MongoDB Connection String URI\nDotenv variable: DB_URI\n")
@@ -68,6 +70,15 @@ func (c *Config) defaultPort() int {
 		}
 	}
 	return defaultPort
+}
+
+func (c *Config) defaultJwtSecret() string {
+	const defaultSecret = ""
+
+	if secret, exists := os.LookupEnv("JWT_SECRET"); exists {
+		return secret
+	}
+	return defaultSecret
 }
 
 func (c *Config) defaultDbUri() string {

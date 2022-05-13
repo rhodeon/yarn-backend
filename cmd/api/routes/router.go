@@ -3,7 +3,7 @@ package routes
 import (
 	"fmt"
 	"github.com/Mutay1/chat-backend/cmd/api/internal"
-	middleware "github.com/Mutay1/chat-backend/middlewares"
+	"github.com/Mutay1/chat-backend/cmd/api/middlewares"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"time"
@@ -27,7 +27,7 @@ func Router(app internal.Application) *gin.Engine {
 	UserRoutes(app, router)
 	WsRoutes(router)
 
-	router.Use(middleware.Authentication())
+	router.Use(middleware.Authentication(app))
 	ProfileRoutes(router)
 	RequestRoutes(router)
 	FriendRoutes(router)
