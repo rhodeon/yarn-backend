@@ -1,12 +1,10 @@
 package controllers
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"github.com/Mutay1/chat-backend/cmd/api/internal"
 	"github.com/Mutay1/chat-backend/domain/repository"
-	"go.mongodb.org/mongo-driver/bson"
 	"log"
 
 	"net/http"
@@ -21,11 +19,10 @@ import (
 	"github.com/Mutay1/chat-backend/models"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
 	"golang.org/x/crypto/bcrypt"
 )
 
-var userCollection *mongo.Collection = database.OpenCollection(database.Client, "user")
+var userCollection = database.OpenCollection(database.Client, "user")
 var validate = validator.New()
 
 //HashPassword is used to encrypt the password before it is stored in the DB
@@ -78,8 +75,7 @@ func SignUp(app internal.Application) gin.HandlerFunc {
 		user.UpdatedAt, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
 		user.ID = primitive.NewObjectID()
 		user.UserID = user.ID.Hex()
-		token, refreshToken, _ := helper.GenerateTokens(app.Config.JwtSecret, user.UserID)
-		user.Token = &token
+		accessToken, refreshToken, _ := helper.GenerateTokens(app.Config.JwtSecret, user.UserID)
 		user.RefreshToken = &refreshToken
 		user.Status = "Hello There! Connect with me on Yarn!"
 		password := HashPassword(*user.Password)
@@ -104,7 +100,7 @@ func SignUp(app internal.Application) gin.HandlerFunc {
 
 		h, _ := time.ParseDuration("24h")
 		ctx.JSON(http.StatusOK, gin.H{
-			"token":          token,
+			"token":          accessToken,
 			"refreshToken":   refreshToken,
 			"expirationTime": h.Milliseconds(),
 			"userID":         newUser.UserID,
@@ -159,12 +155,17 @@ func Login(app internal.Application) gin.HandlerFunc {
 			return
 		}
 
-		token, refreshToken, _ := helper.GenerateTokens(app.Config.JwtSecret, foundUser.UserID)
+		// generate and update user tokens
+		accessToken, refreshToken, _ := helper.GenerateTokens(app.Config.JwtSecret, foundUser.UserID)
 
-		helper.UpdateAllTokens(token, refreshToken, foundUser.UserID)
+		if err = app.Repositories.Users.UpdateRefreshToken(foundUser.UserID, refreshToken); err != nil {
+			helper.HandleInternalServerError(ctx, err)
+			return
+		}
+
 		h, _ := time.ParseDuration("24h")
 		ctx.JSON(http.StatusOK, gin.H{
-			"token":          token,
+			"token":          accessToken,
 			"refreshToken":   refreshToken,
 			"expirationTime": h.Milliseconds(),
 			"userID":         foundUser.UserID,
@@ -180,29 +181,46 @@ func Login(app internal.Application) gin.HandlerFunc {
 	}
 }
 
-//RefreshToken api is used to refresh user token
+// RefreshToken refreshes both the access and refresh tokens of a user.
 func RefreshToken(app internal.Application) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
+	return func(ctx *gin.Context) {
 		var user models.User
+		if err := ctx.BindJSON(&user); err != nil {
+			ctx.AbortWithStatusJSON(
+				http.StatusBadRequest,
+				gin.H{"error": err.Error()},
+			)
+			return
+		}
 
-		var foundUser models.User
-		if err := c.BindJSON(&user); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-		err := userCollection.FindOne(ctx, bson.M{"refreshToken": *user.RefreshToken}).Decode(&foundUser)
-		defer cancel()
+		// retrieve user associated with refresh token
+		foundUser, err := app.Repositories.Users.GetByRefreshToken(*user.RefreshToken)
 		if err != nil {
-			fmt.Println(err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid Token"})
+			switch {
+			case errors.Is(err, repository.ErrRecordNotFound):
+				ctx.AbortWithStatusJSON(
+					http.StatusUnprocessableEntity,
+					gin.H{"error": "invalid or expired refresh token"},
+				)
+
+			default:
+				helper.HandleInternalServerError(ctx, err)
+			}
+
 			return
 		}
-		token, refreshToken, _ := helper.GenerateTokens(app.Config.JwtSecret, foundUser.UserID)
-		helper.UpdateAllTokens(token, refreshToken, foundUser.UserID)
+
+		// generate and update user tokens
+		accessToken, refreshToken, _ := helper.GenerateTokens(app.Config.JwtSecret, foundUser.UserID)
+
+		if err = app.Repositories.Users.UpdateRefreshToken(foundUser.UserID, refreshToken); err != nil {
+			helper.HandleInternalServerError(ctx, err)
+			return
+		}
+
 		h, _ := time.ParseDuration("24h")
-		c.JSON(http.StatusOK, gin.H{
-			"token":          token,
+		ctx.JSON(http.StatusOK, gin.H{
+			"token":          accessToken,
 			"refreshToken":   refreshToken,
 			"expirationTime": h.Milliseconds(),
 			"userID":         foundUser.UserID,
