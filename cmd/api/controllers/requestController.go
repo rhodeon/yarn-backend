@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/Mutay1/chat-backend/cmd/api/internal"
 	"github.com/Mutay1/chat-backend/database"
 	"github.com/Mutay1/chat-backend/models"
 	"github.com/gin-gonic/gin"
@@ -26,7 +27,7 @@ type RequestBody struct {
 }
 
 //SendRequest generates a Friend Request
-func SendRequest() gin.HandlerFunc {
+func SendRequest(app internal.Application) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var request models.Friendship
 		var requester models.Friend
@@ -50,25 +51,8 @@ func SendRequest() gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid Username"})
 			return
 		}
-		filter := bson.D{
-			{"$or",
-				bson.A{
-					bson.M{
-						"$and": []interface{}{
-							bson.M{"requester.username": recipient.Username},
-							bson.M{"recipient.username": requester.Username},
-						},
-					},
-					bson.M{
-						"$and": []interface{}{
-							bson.M{"requester.username": requester.Username},
-							bson.M{"recipient.username": recipient.Username},
-						},
-					},
-				},
-			},
-		}
-		count, err := friendshipCollection.CountDocuments(ctx, filter)
+
+		count, err := app.Repositories.Friendships.CountFriendRequest(requester, recipient)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "error occured while checking for the phone number"})
 			return
@@ -89,7 +73,7 @@ func SendRequest() gin.HandlerFunc {
 		request.Requester = requester
 		request.CreatedAt, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
 		request.UpdatedAt, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
-		resultInsertionNumber, insertErr := friendshipCollection.InsertOne(ctx, request)
+		resultInsertionNumber, insertErr := app.Repositories.Friendships.CreateRequest(request)
 
 		if insertErr != nil {
 			msg := fmt.Sprintf("Request item was not created")
@@ -103,70 +87,40 @@ func SendRequest() gin.HandlerFunc {
 }
 
 //GetSentRequest retrieves all requests sent by signed in user
-func GetSentRequest() gin.HandlerFunc {
+func GetSentRequest(app internal.Application) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id, err := primitive.ObjectIDFromHex(c.GetString("uid"))
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid UserID"})
 			return
 		}
-		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
-		filter := bson.D{
-			{"$and",
-				bson.A{
-					bson.D{{"accepted", bson.D{{"$eq", false}}}},
-					bson.D{{"requester._id", id}},
-				},
-			},
-		}
-		cursor, err := friendshipCollection.Find(ctx, filter)
-		defer cancel()
+		requestsLoaded, err := app.Repositories.Friendships.GetRequestSent(id)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid Username"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		var requestsLoaded []bson.M
-		if err = cursor.All(ctx, &requestsLoaded); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "An error occurred"})
-		}
-		defer cancel()
 		c.JSON(http.StatusOK, requestsLoaded)
 	}
 }
 
 //GetReceivedRequest retrieves all requests received by signed in user
-func GetReceivedRequest() gin.HandlerFunc {
+func GetReceivedRequest(app internal.Application) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id, err := primitive.ObjectIDFromHex(c.GetString("uid"))
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid UserID"})
 			return
 		}
-		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
-		filter := bson.D{
-			{"$and",
-				bson.A{
-					bson.D{{"accepted", bson.D{{"$eq", false}}}},
-					bson.D{{"recipient._id", id}},
-				},
-			},
-		}
-		cursor, err := friendshipCollection.Find(ctx, filter)
-		defer cancel()
+		requestsLoaded, err := app.Repositories.Friendships.GetRequestReceived(id)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid Username"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		var requestsLoaded []bson.M
-		if err = cursor.All(ctx, &requestsLoaded); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "An error occurred"})
-		}
-		defer cancel()
 		c.JSON(http.StatusOK, requestsLoaded)
 	}
 }
 
-func AcceptRequest() gin.HandlerFunc {
+func AcceptRequest(app internal.Application) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		body := RequestBody{}
 		if err := c.BindJSON(&body); err != nil {
@@ -184,24 +138,19 @@ func AcceptRequest() gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
-		_, err = friendshipCollection.UpdateOne(
-			ctx,
-			bson.M{"_id": id},
-			bson.D{{"$set",
-				bson.D{
-					{"accepted", true},
-				},
-			}},
-		)
-		defer cancel()
+		err = app.Repositories.Friendships.AcceptRequest(id)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
 		c.JSON(http.StatusOK, gin.H{
 			"message": "Request successfully accepted",
 		})
 	}
 }
 
-func DeleteRequest() gin.HandlerFunc {
+func DeleteRequest(app internal.Application) gin.HandlerFunc {
 	return func(c *gin.Context) {
 
 		body := RequestBody{}
@@ -214,11 +163,10 @@ func DeleteRequest() gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
-		_, err = friendshipCollection.DeleteOne(
-			ctx,
-			bson.M{"_id": id},
-		)
-		defer cancel()
+		err = app.Repositories.Friendships.DeleteRequest(id)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 	}
 }

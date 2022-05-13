@@ -3,15 +3,22 @@ package database
 import (
 	"context"
 	"errors"
+	"time"
+
 	"github.com/Mutay1/chat-backend/domain/repository"
 	"github.com/Mutay1/chat-backend/models"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
-	"time"
 )
 
 type UserController struct {
 	Db *mongo.Database
+}
+
+func NewUserController(db *mongo.Database) repository.UserRepository {
+	return UserController{
+		Db: db,
+	}
 }
 
 const collectionUsers = "user"
