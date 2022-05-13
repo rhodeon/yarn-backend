@@ -14,7 +14,7 @@ type UserController struct {
 	Db *mongo.Database
 }
 
-const collectionUsers = "users"
+const collectionUsers = "user"
 
 // Create registers a new user, returning an error if a duplicate username or email is found.
 // repository.ErrDuplicateDetails is returned if at least the username or the email already exists in the database.
